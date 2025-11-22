@@ -1,21 +1,846 @@
-    function animate(timestamp) {
-      if (!lastTimestamp) lastTimestamp = timestamp;
-      const deltaMs = timestamp - lastTimestamp;
-      lastTimestamp = timestamp;
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <title>时间膨胀演示：光钟模型</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <style>
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      margin: 0;
+      padding: 0;
+      background: #0b1020;
+      color: #f5f5f5;
+    }
 
-      // 将动画时间缩放到一个合理的模拟时间步长（deltaSeconds）
-      const deltaSeconds = deltaMs / 1000; // 1:1 实时，也可以乘个倍率加速
+    header {
+      padding: 16px 24px;
+      background: #10162f;
+      border-bottom: 1px solid #222a45;
+    }
 
-      // 更新实验计时：地面时间以 deltaSeconds 前进，飞船以 deltaSeconds / γ 前进
-      if (experimentRunning) {
-        const gamma = 1 / Math.sqrt(1 - vOverC * vOverC || 1e-8);
-        labTime += deltaSeconds;
-        shipTime += deltaSeconds / gamma;
-        updateExperimentTexts();
+    header h1 {
+      margin: 0 0 4px;
+      font-size: 20px;
+    }
+
+    header p {
+      margin: 0;
+      font-size: 13px;
+      color: #b0b5d8;
+    }
+
+    main {
+      padding: 16px 24px 32px;
+      max-width: 1100px;
+      margin: 0 auto;
+    }
+
+    .controls {
+      margin-bottom: 16px;
+      padding: 12px 16px;
+      background: #151b37;
+      border-radius: 8px;
+      border: 1px solid #222a45;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px 24px;
+      align-items: center;
+      font-size: 14px;
+    }
+
+    .controls label {
+      font-weight: 500;
+    }
+
+    .slider-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 260px;
+    }
+
+    input[type="range"] {
+      width: 180px;
+    }
+
+    select {
+      padding: 4px 8px;
+      border-radius: 4px;
+      border: 1px solid #3b4470;
+      background: #10162f;
+      color: #f5f5f5;
+    }
+
+    .value-display {
+      min-width: 140px;
+      font-variant-numeric: tabular-nums;
+      color: #ffc857;
+    }
+
+    .panels {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+
+    .panel {
+      background: #151b37;
+      border-radius: 8px;
+      border: 1px solid #222a45;
+      padding: 12px 12px 16px;
+    }
+
+    .panel h2 {
+      margin: 0 0 6px;
+      font-size: 15px;
+    }
+
+    .panel p {
+      margin: 0 0 8px;
+      font-size: 12px;
+      color: #b0b5d8;
+      line-height: 1.5;
+    }
+
+    canvas {
+      width: 100%;
+      height: 260px;
+      background: radial-gradient(circle at top, #20274a 0, #050814 60%);
+      border-radius: 6px;
+      border: 1px solid #252b4b;
+      display: block;
+    }
+
+    .formula {
+      margin-top: 8px;
+      font-size: 13px;
+      color: #b0b5d8;
+      line-height: 1.6;
+    }
+
+    .formula code {
+      background: #10162f;
+      padding: 2px 4px;
+      border-radius: 4px;
+      font-size: 12px;
+    }
+
+    .hint {
+      font-size: 12px;
+      color: #9ea4cf;
+      margin-top: 4px;
+    }
+
+    .highlight {
+      color: #ffcb77;
+      font-weight: 500;
+    }
+
+    .numeric {
+      font-variant-numeric: tabular-nums;
+      font-family: "SF Mono", Menlo, Consolas, monospace;
+    }
+
+    .sub-panels {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 16px;
+      margin-top: 16px;
+    }
+
+    .sub-panel-title {
+      font-size: 14px;
+      margin-bottom: 4px;
+      font-weight: 600;
+    }
+
+    .field-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 6px;
+      font-size: 12px;
+    }
+
+    .field-row label {
+      min-width: 80px;
+    }
+
+    .field-row input[type="number"] {
+      width: 100px;
+      padding: 2px 4px;
+      border-radius: 4px;
+      border: 1px solid #3b4470;
+      background: #10162f;
+      color: #f5f5f5;
+      font-size: 12px;
+    }
+
+    .field-row small {
+      color: #8f96c7;
+    }
+
+    .result-block {
+      margin-top: 8px;
+      padding: 8px;
+      background: #10162f;
+      border-radius: 6px;
+      border: 1px solid #252b4b;
+      font-size: 12px;
+      line-height: 1.6;
+    }
+
+    .result-line {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .result-label {
+      color: #9ea4cf;
+    }
+
+    .result-value {
+      color: #f5f5f5;
+      font-variant-numeric: tabular-nums;
+    }
+
+    footer {
+      padding: 8px 24px 20px;
+      font-size: 12px;
+      color: #7076a0;
+      text-align: center;
+    }
+
+    @media (max-width: 600px) {
+      header, main, footer {
+        padding-left: 12px;
+        padding-right: 12px;
+      }
+      .controls {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+      .slider-group {
+        width: 100%;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>时间膨胀可视化：光钟模型（HTML + JavaScript）</h1>
+    <p>拖动速度滑块，切换不同观察者视角，并查看公式和应用示例，理解光速恒定与时间膨胀的关系。</p>
+  </header>
+
+  <main>
+    <!-- 顶部控制区 -->
+    <section class="controls">
+      <div class="slider-group">
+        <label for="speedRange">飞船速度 v / c：</label>
+        <input
+          id="speedRange"
+          type="range"
+          min="0"
+          max="95"
+          value="60"
+          step="1"
+        />
+        <span id="speedText" class="value-display"></span>
+      </div>
+
+      <div>
+        <div>洛伦兹因子 γ：</div>
+        <div id="gammaText" class="value-display numeric"></div>
+      </div>
+
+      <div>
+        <div>时间膨胀比（飞船钟 / 地面钟）：</div>
+        <div id="dilationText" class="value-display numeric"></div>
+      </div>
+
+      <div>
+        <label for="viewModeSelect">视角：</label>
+        <select id="viewModeSelect">
+          <option value="ground">地面观察者视角</option>
+          <option value="ship">飞船观察者视角</option>
+        </select>
+        <div class="hint" id="viewHint"></div>
+      </div>
+    </section>
+
+    <!-- 上方两个主要动画面板 -->
+    <section class="panels">
+      <div class="panel">
+        <h2>静止参考系中的光钟</h2>
+        <p>这是在光钟自身参考系下的一台“理想钟”：上下两面镜子之间，光在竖直方向来回反射，每一次往返就是一次“滴答”。</p>
+        <canvas id="canvasRest" width="500" height="260"></canvas>
+      </div>
+
+      <div class="panel">
+        <h2 id="rightTitle">高速运动中的光钟（地面视角）</h2>
+        <p id="rightDesc">
+          你静止在地面，看着整台光钟随飞船一起运动。光在你看来走的是更长的斜线路径，但你测得的光速依然是 c。
+        </p>
+        <canvas id="canvasMoving" width="500" height="260"></canvas>
+        <div class="formula">
+          公式：<code>γ = 1 / √(1 - v²/c²)</code>，
+          外部观察者看到：<code>Δt = γ · Δτ</code>，
+          其中 <code>Δτ</code> 是光钟自身测得的时间（固有时间）。
+        </div>
+      </div>
+    </section>
+
+    <!-- 数值小黑板 + 双生子 + 工程应用 -->
+    <section class="panel">
+      <h2>数值小黑板与应用示例</h2>
+      <p>
+        下面三个模块分别展示：<span class="highlight">同一台光钟在不同参考系中的时间关系</span>、
+        <span class="highlight">双生子佯谬</span>以及<span class="highlight">工程中的时间膨胀效应</span>。
+        所有计算都基于你上方选择的速度 v/c。
+      </p>
+
+      <div class="sub-panels">
+        <!-- 数值小黑板 -->
+        <div>
+          <div class="sub-panel-title">① 光钟数值小黑板（同一台钟，不同视角）</div>
+          <p style="font-size:12px; color:#9ea4cf;">
+            设光钟高度 <span class="numeric">h = 300,000 km</span>（大约是光在 1 秒内走的距离的一半），
+            对比飞船自身视角与地面视角下的光程和时间。
+          </p>
+          <div class="result-block" id="blackboard">
+            <div class="result-line">
+              <span class="result-label">光速：</span>
+              <span class="result-value numeric">c = 300,000 km/s（约）</span>
+            </div>
+            <hr style="border-color:#222a45; margin:6px 0;" />
+            <div class="result-line">
+              <span class="result-label">飞船参考系：</span>
+              <span class="result-value">（光钟自身视角，光竖直上下走）</span>
+            </div>
+            <div class="result-line">
+              <span class="result-label">单程光程：</span>
+              <span class="result-value numeric" id="shipPath">h = 300,000 km</span>
+            </div>
+            <div class="result-line">
+              <span class="result-label">往返时间 Δτ：</span>
+              <span class="result-value numeric" id="shipTime">Δτ ≈ 2.000 s</span>
+            </div>
+            <hr style="border-color:#222a45; margin:6px 0;" />
+            <div class="result-line">
+              <span class="result-label">地面参考系：</span>
+              <span class="result-value">（地面观察者，光走斜线）</span>
+            </div>
+            <div class="result-line">
+              <span class="result-label">单程光程：</span>
+              <span class="result-value numeric" id="groundPath">L ≈ 300,000 km</span>
+            </div>
+            <div class="result-line">
+              <span class="result-label">往返时间 Δt：</span>
+              <span class="result-value numeric" id="groundTime">Δt ≈ 2.000 s</span>
+            </div>
+            <div class="result-line">
+              <span class="result-label">时间关系：</span>
+              <span class="result-value numeric" id="timeRelation">Δt = γ · Δτ</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 双生子佯谬 -->
+        <div>
+          <div class="sub-panel-title">② 双生子佯谬（简化版）</div>
+          <p style="font-size:12px; color:#9ea4cf;">
+            假设弟弟坐飞船匀速远行再返回，哥哥留在地球，比较他们经历的时间。这里只演示
+            <span class="highlight">速度导致的时间膨胀</span>。
+          </p>
+          <div class="field-row">
+            <label for="tripYears">往返总时间</label>
+            <input type="number" id="tripYears" value="10" min="0.1" step="0.1" />
+            <small>（以地球时间计，单位：年）</small>
+          </div>
+          <div class="hint">
+            速度使用上方滑块设置的 v/c。只考虑“高速度飞行阶段”的简化情形。
+          </div>
+          <div class="result-block" id="twinsResult">
+            <div class="result-line">
+              <span class="result-label">哥哥（留在地球）：</span>
+              <span class="result-value numeric" id="tEarth">T<sub>earth</sub> ≈ 10.0 年</span>
+            </div>
+            <div class="result-line">
+              <span class="result-label">弟弟（坐飞船）：</span>
+              <span class="result-value numeric" id="tShip">T<sub>ship</sub> ≈ 10.0 年</span>
+            </div>
+            <div class="result-line">
+              <span class="result-label">年龄差：</span>
+              <span class="result-value numeric" id="tDelta">ΔT ≈ 0.0 年（弟弟更年轻）</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 工程应用（狭义部分） -->
+        <div>
+          <div class="sub-panel-title">③ 工程示例：高速运动导致的时间差</div>
+          <p style="font-size:12px; color:#9ea4cf;">
+            假设一颗“理想卫星”绕地球做匀速圆周运动，只考虑
+            <span class="highlight">狭义相对论</span>（速度导致的时间变慢），估算每天的时间差。
+          </p>
+          <div class="field-row">
+            <label for="earthDays">地面时间</label>
+            <input type="number" id="earthDays" value="1" min="0.1" step="0.1" />
+            <small>（单位：天）</small>
+          </div>
+          <div class="hint">
+            实际 GPS 还要考虑引力时间膨胀，这里只演示“速度越大，卫星钟走得越慢”。
+          </div>
+          <div class="result-block" id="engineerResult">
+            <div class="result-line">
+              <span class="result-label">地面参考系：</span>
+              <span class="result-value numeric" id="engEarth">T<sub>earth</sub> ≈ 1.000 天</span>
+            </div>
+            <div class="result-line">
+              <span class="result-label">卫星钟（同样速度 v）：</span>
+              <span class="result-value numeric" id="engSat">T<sub>sat</sub> ≈ 1.000 天</span>
+            </div>
+            <div class="result-line">
+              <span class="result-label">每天时间差：</span>
+              <span class="result-value numeric" id="engDelta">Δt ≈ 0.0 微秒（卫星钟更慢）</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    本页面为静态前端演示，可直接通过 GitHub Pages 访问。
+  </footer>
+
+  <script>
+    // ===== 全局状态 =====
+    let vOverC = 0.6;          // 速度 v/c
+    let viewMode = "ground";   // 'ground' 地面观察者，'ship' 飞船观察者
+
+    const speedRangeEl = document.getElementById("speedRange");
+    const speedTextEl = document.getElementById("speedText");
+    const gammaTextEl = document.getElementById("gammaText");
+    const dilationTextEl = document.getElementById("dilationText");
+    const viewModeSelect = document.getElementById("viewModeSelect");
+    const viewHintEl = document.getElementById("viewHint");
+    const rightTitleEl = document.getElementById("rightTitle");
+    const rightDescEl = document.getElementById("rightDesc");
+
+    const canvasRest = document.getElementById("canvasRest");
+    const canvasMoving = document.getElementById("canvasMoving");
+    const ctxRest = canvasRest.getContext("2d");
+    const ctxMoving = canvasMoving.getContext("2d");
+
+    // 数值小黑板元素
+    const shipPathEl = document.getElementById("shipPath");
+    const shipTimeEl = document.getElementById("shipTime");
+    const groundPathEl = document.getElementById("groundPath");
+    const groundTimeEl = document.getElementById("groundTime");
+    const timeRelationEl = document.getElementById("timeRelation");
+
+    // 双生子元素
+    const tripYearsEl = document.getElementById("tripYears");
+    const tEarthEl = document.getElementById("tEarth");
+    const tShipEl = document.getElementById("tShip");
+    const tDeltaEl = document.getElementById("tDelta");
+
+    // 工程示例元素
+    const earthDaysEl = document.getElementById("earthDays");
+    const engEarthEl = document.getElementById("engEarth");
+    const engSatEl = document.getElementById("engSat");
+    const engDeltaEl = document.getElementById("engDelta");
+
+    // 几何参数
+    const clockTopY = 40;
+    const clockBottomY = 220;
+    const clockHeight = clockBottomY - clockTopY;
+    const clockWidth = 100;
+
+    // 运动视觉速度（像素/秒）
+    const baseHorizontalSpeed = 160;
+
+    let startTime = null;
+
+    // ===== 顶部文本 & 视角说明 =====
+    function updateInfoTexts() {
+      const gamma = 1 / Math.sqrt(1 - vOverC * vOverC || 1e-8);
+      speedTextEl.textContent = `v ≈ ${(vOverC * 100).toFixed(0)}% · c`;
+      gammaTextEl.textContent = `γ ≈ ${gamma.toFixed(3)}`;
+      dilationTextEl.textContent = `飞船钟走时速度 ≈ (1 / γ) ≈ ${(1 / gamma).toFixed(3)} 倍于地面钟`;
+
+      updateBlackboard();
+      updateTwins();
+      updateEngineer();
+    }
+
+    function updateViewHint() {
+      if (viewMode === "ground") {
+        viewHintEl.textContent = "你静止在地面，看着一台随飞船运动的光钟（路径斜，光速仍为 c）。";
+        rightTitleEl.textContent = "高速运动中的光钟（地面视角）";
+        rightDescEl.textContent =
+          "你静止在地面，看着整台光钟随飞船一起运动。光在你看来走的是更长的斜线路径，但你测得的光速依然是 c。";
+      } else {
+        viewHintEl.textContent = "你跟着飞船一起运动，在自己的参考系中看到光钟：光竖直上下走，光速仍为 c。";
+        rightTitleEl.textContent = "高速运动中的光钟（飞船视角）";
+        rightDescEl.textContent =
+          "你与飞船和光钟一起运动，此时光钟在你看来是静止的：两面镜子固定不动，光只在竖直方向来回反射，就像左侧静止光钟。";
+      }
+    }
+
+    speedRangeEl.addEventListener("input", () => {
+      vOverC = parseInt(speedRangeEl.value, 10) / 100;
+      updateInfoTexts();
+    });
+
+    viewModeSelect.addEventListener("change", () => {
+      viewMode = viewModeSelect.value;
+      updateViewHint();
+    });
+
+    tripYearsEl.addEventListener("input", updateTwins);
+    earthDaysEl.addEventListener("input", updateEngineer);
+
+    updateInfoTexts();
+    updateViewHint();
+
+    // ===== 数值小黑板逻辑 =====
+    function updateBlackboard() {
+      // 取一个“示意用”的高度 h = 300,000 km
+      const h = 300000; // km
+      const c = 300000; // km/s 近似
+
+      const gamma = 1 / Math.sqrt(1 - vOverC * vOverC || 1e-8);
+
+      // 飞船参考系：光竖直走
+      const shipSinglePath = h;      // 单程
+      const shipRoundTime = 2 * h / c; // 往返时间 Δτ
+
+      // 地面参考系：光走斜线，竖直投影为 h，实际路径更长
+      // 为了简单演示，这里用 L = γ * h（体现路径变长的趋势），不做精确推导
+      const groundSinglePath = gamma * h;
+      const groundRoundTime = gamma * shipRoundTime; // Δt = γ · Δτ
+
+      shipPathEl.textContent = `h = ${shipSinglePath.toLocaleString()} km`;
+      shipTimeEl.textContent = `Δτ ≈ ${shipRoundTime.toFixed(3)} s`;
+
+      groundPathEl.textContent = `L ≈ ${groundSinglePath.toLocaleString(undefined, {maximumFractionDigits:0})} km`;
+      groundTimeEl.textContent = `Δt ≈ ${groundRoundTime.toFixed(3)} s`;
+
+      timeRelationEl.textContent = `Δt = γ · Δτ ≈ ${gamma.toFixed(3)} × ${shipRoundTime.toFixed(3)} s`;
+    }
+
+    // ===== 双生子佯谬逻辑（只考虑匀速飞行阶段） =====
+    function updateTwins() {
+      const yearsEarth = parseFloat(tripYearsEl.value) || 0;
+      const gamma = 1 / Math.sqrt(1 - vOverC * vOverC || 1e-8);
+
+      // 地球时间：输入值
+      const tEarth = yearsEarth;
+      // 飞船固有时间：T_ship = T_earth / γ
+      const tShip = tEarth / gamma;
+      const delta = tEarth - tShip;
+
+      tEarthEl.innerHTML = `T<sub>earth</sub> ≈ ${tEarth.toFixed(2)} 年`;
+      tShipEl.innerHTML = `T<sub>ship</sub> ≈ ${tShip.toFixed(2)} 年`;
+      tDeltaEl.innerHTML = `ΔT = T<sub>earth</sub> - T<sub>ship</sub> ≈ ${delta.toFixed(2)} 年（弟弟更年轻）`;
+    }
+
+    // ===== 工程示例（只用狭义相对论近似） =====
+    function updateEngineer() {
+      const days = parseFloat(earthDaysEl.value) || 0;
+      const gamma = 1 / Math.sqrt(1 - vOverC * vOverC || 1e-8);
+
+      // 地面参考系时间
+      const tEarthDays = days;
+      const tEarthSeconds = tEarthDays * 24 * 3600;
+
+      // 卫星固有时间（以同样 v 飞行）：T_sat = T_earth / γ
+      const tSatSeconds = tEarthSeconds / gamma;
+      const deltaSeconds = tEarthSeconds - tSatSeconds; // 地面和卫星钟之间的差
+
+      // 转成微秒（1 秒 = 1e6 微秒）
+      const deltaMicro = deltaSeconds * 1e6;
+
+      engEarthEl.innerHTML = `T<sub>earth</sub> ≈ ${tEarthDays.toFixed(3)} 天`;
+      engSatEl.innerHTML = `T<sub>sat</sub> ≈ ${(tSatSeconds / 86400).toFixed(3)} 天`;
+      engDeltaEl.innerHTML = `Δt ≈ ${deltaMicro.toFixed(2)} 微秒（卫星钟更慢）`;
+    }
+
+    // ===== 动画：光钟部分 =====
+    // 静止光钟
+    function drawRestClock(elapsed) {
+      const ctx = ctxRest;
+      const w = canvasRest.width;
+      const h = canvasRest.height;
+
+      ctx.clearRect(0, 0, w, h);
+      drawGrid(ctx, w, h);
+
+      const xCenter = w / 2;
+
+      // 镜子
+      ctx.strokeStyle = "#cfd2ff";
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.moveTo(xCenter - clockWidth / 2, clockTopY);
+      ctx.lineTo(xCenter + clockWidth / 2, clockTopY);
+      ctx.moveTo(xCenter - clockWidth / 2, clockBottomY);
+      ctx.lineTo(xCenter + clockWidth / 2, clockBottomY);
+      ctx.stroke();
+
+      // 垂直方向周期运动
+      const T = 2000;
+      const phase = (elapsed % T) / T;
+      let y;
+      if (phase < 0.5) {
+        const r = phase / 0.5;
+        y = clockTopY + r * clockHeight;
+      } else {
+        const r = (phase - 0.5) / 0.5;
+        y = clockBottomY - r * clockHeight;
       }
 
-      drawRestClock(timestamp);
-      drawMovingClock(timestamp);
+      // 竖直光路
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.25)";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(xCenter, clockTopY);
+      ctx.lineTo(xCenter, clockBottomY);
+      ctx.stroke();
+
+      // 光子
+      ctx.fillStyle = "#ffb703";
+      ctx.beginPath();
+      ctx.arc(xCenter, y, 7, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // 运动光钟：地面视角（整台光钟平移 + 斜线路径）
+    function drawMovingClockGround(elapsed) {
+      const ctx = ctxMoving;
+      const w = canvasMoving.width;
+      const h = canvasMoving.height;
+
+      ctx.clearRect(0, 0, w, h);
+      drawGrid(ctx, w, h);
+
+      const T = 2000;
+      const phase = (elapsed % T) / T;
+
+      // 在光钟自身参考系中的垂直运动
+      let localY;
+      if (phase < 0.5) {
+        const r = phase / 0.5;
+        localY = clockTopY + r * clockHeight;
+      } else {
+        const r = (phase - 0.5) / 0.5;
+        localY = clockBottomY - r * clockHeight;
+      }
+
+      // 整体水平位置（循环）
+      const shipSpeed = baseHorizontalSpeed * vOverC;
+      const loopWidth = w - 80; // 在画布内左右移动
+      const shipOffset = (elapsed / 1000) * shipSpeed;
+      const loopX = ((shipOffset % loopWidth) + loopWidth) % loopWidth;
+      const xCenter = 40 + loopX;
+
+      // 镜子跟着一起平移
+      ctx.strokeStyle = "#cfd2ff";
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.moveTo(xCenter - clockWidth / 2, clockTopY);
+      ctx.lineTo(xCenter + clockWidth / 2, clockTopY);
+      ctx.moveTo(xCenter - clockWidth / 2, clockBottomY);
+      ctx.lineTo(xCenter + clockWidth / 2, clockBottomY);
+      ctx.stroke();
+
+      // 在飞船局部参考系中的竖直光路
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.25)";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(xCenter, clockTopY);
+      ctx.lineTo(xCenter, clockBottomY);
+      ctx.stroke();
+
+      // 在地面视角下看到的斜线路径（尾迹）
+      const trailSteps = 40;
+      const trailDuration = 700;
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.3)";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+
+      for (let i = 0; i <= trailSteps; i++) {
+        const dt = (i / trailSteps) * trailDuration;
+        const tPast = elapsed - dt;
+        const phasePast = (((tPast % T) + T) % T) / T;
+
+        let localYPast;
+        if (phasePast < 0.5) {
+          const r = phasePast / 0.5;
+          localYPast = clockTopY + r * clockHeight;
+        } else {
+          const r = (phasePast - 0.5) / 0.5;
+          localYPast = clockBottomY - r * clockHeight;
+        }
+
+        const shipOffsetPast = (tPast / 1000) * shipSpeed;
+        const loopXPast = ((shipOffsetPast % loopWidth) + loopWidth) % loopWidth;
+        const xCenterPast = 40 + loopXPast;
+
+        if (i === 0) ctx.moveTo(xCenterPast, localYPast);
+        else ctx.lineTo(xCenterPast, localYPast);
+      }
+      ctx.stroke();
+
+      // 当前光子
+      ctx.fillStyle = "#ffb703";
+      ctx.beginPath();
+      ctx.arc(xCenter, localY, 7, 0, Math.PI * 2);
+      ctx.fill();
+
+      // 飞船
+      drawShip(ctx, xCenter, clockBottomY + 30, vOverC);
+    }
+
+    // 运动光钟：飞船视角（整台钟静止，光竖直）
+    function drawMovingClockShip(elapsed) {
+      const ctx = ctxMoving;
+      const w = canvasMoving.width;
+      const h = canvasMoving.height;
+
+      ctx.clearRect(0, 0, w, h);
+      drawGrid(ctx, w, h);
+
+      const xCenter = w / 2;
+
+      // 镜子在飞船参考系中是静止的
+      ctx.strokeStyle = "#cfd2ff";
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.moveTo(xCenter - clockWidth / 2, clockTopY);
+      ctx.lineTo(xCenter + clockWidth / 2, clockTopY);
+      ctx.moveTo(xCenter - clockWidth / 2, clockBottomY);
+      ctx.lineTo(xCenter + clockWidth / 2, clockBottomY);
+      ctx.stroke();
+
+      // 垂直方向周期运动（与左侧静止光钟相同）
+      const T = 2000;
+      const phase = (elapsed % T) / T;
+      let y;
+      if (phase < 0.5) {
+        const r = phase / 0.5;
+        y = clockTopY + r * clockHeight;
+      } else {
+        const r = (phase - 0.5) / 0.5;
+        y = clockBottomY - r * clockHeight;
+      }
+
+      // 竖直光路
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.25)";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(xCenter, clockTopY);
+      ctx.lineTo(xCenter, clockBottomY);
+      ctx.stroke();
+
+      // 光子
+      ctx.fillStyle = "#ffb703";
+      ctx.beginPath();
+      ctx.arc(xCenter, y, 7, 0, Math.PI * 2);
+      ctx.fill();
+
+      // 在飞船视角里，飞船本身相当于“背景”，画在底部中间
+      drawShip(ctx, xCenter, clockBottomY + 30, vOverC);
+    }
+
+    // 背景网格 + 星点
+    function drawGrid(ctx, w, h) {
+      ctx.save();
+      ctx.strokeStyle = "rgba(144, 164, 255, 0.12)";
+      ctx.lineWidth = 1;
+
+      for (let x = 40; x < w; x += 40) {
+        ctx.beginPath();
+        ctx.moveTo(x, 10);
+        ctx.lineTo(x, h - 10);
+        ctx.stroke();
+      }
+
+      for (let y = 20; y < h; y += 40) {
+        ctx.beginPath();
+        ctx.moveTo(20, y);
+        ctx.lineTo(w - 20, y);
+        ctx.stroke();
+      }
+
+      for (let i = 0; i < 18; i++) {
+        const sx = Math.random() * w;
+        const sy = Math.random() * h;
+        ctx.fillStyle = "rgba(255, 255, 255, " + (0.2 + Math.random() * 0.4) + ")";
+        ctx.fillRect(sx, sy, 1.2, 1.2);
+      }
+
+      ctx.restore();
+    }
+
+    // 飞船
+    function drawShip(ctx, x, y, v) {
+      ctx.save();
+      ctx.translate(x, y);
+
+      const shipWidth = 90;
+      const shipHeight = 20;
+
+      ctx.fillStyle = "#e0fbfc";
+      ctx.beginPath();
+      ctx.moveTo(-shipWidth / 2, 0);
+      ctx.quadraticCurveTo(0, -shipHeight, shipWidth / 2, 0);
+      ctx.quadraticCurveTo(0, shipHeight, -shipWidth / 2, 0);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.fillStyle = "#118ab2";
+      ctx.beginPath();
+      ctx.ellipse(-15, 0, 10, 7, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.ellipse(8, 0, 7, 5, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      const flameLength = 18 + v * 25;
+      ctx.fillStyle = "rgba(255, 111, 0, " + (0.4 + v * 0.6) + ")";
+      ctx.beginPath();
+      ctx.moveTo(-shipWidth / 2, 0);
+      ctx.lineTo(-shipWidth / 2 - flameLength, -5);
+      ctx.lineTo(-shipWidth / 2 - flameLength * 0.7, 0);
+      ctx.lineTo(-shipWidth / 2 - flameLength, 5);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.restore();
+    }
+
+    // 动画主循环
+    function animate(timestamp) {
+      if (startTime === null) startTime = timestamp;
+      const elapsed = timestamp - startTime;
+
+      drawRestClock(elapsed);
+      if (viewMode === "ground") {
+        drawMovingClockGround(elapsed);
+      } else {
+        drawMovingClockShip(elapsed);
+      }
 
       requestAnimationFrame(animate);
     }
+
+    requestAnimationFrame(animate);
+  </script>
+</body>
+</html>
