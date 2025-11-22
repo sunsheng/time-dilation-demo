@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Time Dilation Visualization Demo</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 0; padding: 0; display: flex; justify-content: center; align-items: center; height: 100vh; background-color: #f4f4f4; }
+        .container { text-align: center; }
+        #dilation-demo { font-size: 2em; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Time Dilation Visualization</h1>
+        <div id="dilation-demo">Loading...</div>
+    </div>
+    <script>
+        function calculateTimeDilation(speed) {
+            const c = 299792.458; // speed of light in km/s
+            return 1 / Math.sqrt(1 - (speed * speed) / (c * c));
+        }
+        function updateDilation() {
+            const speed = parseFloat(document.getElementById('speed').value) || 0;
+            const dilation = calculateTimeDilation(speed);
+            document.getElementById('dilation-demo').textContent = `Time Dilation Factor: ${dilation.toFixed(5)}`;
+        }
+        updateDilation(); // call once to initialize
+    </script>
+</body>
+</html>
