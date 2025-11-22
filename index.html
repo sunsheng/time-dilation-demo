@@ -1,31 +1,457 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Time Dilation Visualization Demo</title>
-    <style>
-        body { font-family: Arial, sans-serif; margin: 0; padding: 0; display: flex; justify-content: center; align-items: center; height: 100vh; background-color: #f4f4f4; }
-        .container { text-align: center; }
-        #dilation-demo { font-size: 2em; }
-    </style>
+  <meta charset="UTF-8" />
+  <title>时间膨胀演示：光钟模型</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <style>
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      margin: 0;
+      padding: 0;
+      background: #0b1020;
+      color: #f5f5f5;
+    }
+
+    header {
+      padding: 16px 24px;
+      background: #10162f;
+      border-bottom: 1px solid #222a45;
+    }
+
+    header h1 {
+      margin: 0 0 4px;
+      font-size: 20px;
+    }
+
+    header p {
+      margin: 0;
+      font-size: 13px;
+      color: #b0b5d8;
+    }
+
+    main {
+      padding: 16px 24px 32px;
+      max-width: 1100px;
+      margin: 0 auto;
+    }
+
+    .controls {
+      margin-bottom: 16px;
+      padding: 12px 16px;
+      background: #151b37;
+      border-radius: 8px;
+      border: 1px solid #222a45;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px 24px;
+      align-items: center;
+      font-size: 14px;
+    }
+
+    .controls label {
+      font-weight: 500;
+    }
+
+    .slider-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 260px;
+    }
+
+    input[type="range"] {
+      width: 180px;
+    }
+
+    .value-display {
+      min-width: 140px;
+      font-variant-numeric: tabular-nums;
+      color: #ffc857;
+    }
+
+    .panels {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+
+    .panel {
+      background: #151b37;
+      border-radius: 8px;
+      border: 1px solid #222a45;
+      padding: 12px 12px 16px;
+    }
+
+    .panel h2 {
+      margin: 0 0 6px;
+      font-size: 15px;
+    }
+
+    .panel p {
+      margin: 0 0 8px;
+      font-size: 12px;
+      color: #b0b5d8;
+      line-height: 1.5;
+    }
+
+    canvas {
+      width: 100%;
+      height: 260px;
+      background: radial-gradient(circle at top, #20274a 0, #050814 60%);
+      border-radius: 6px;
+      border: 1px solid #252b4b;
+      display: block;
+    }
+
+    .formula {
+      margin-top: 8px;
+      font-size: 13px;
+      color: #b0b5d8;
+      line-height: 1.6;
+    }
+
+    .formula code {
+      background: #10162f;
+      padding: 2px 4px;
+      border-radius: 4px;
+      font-size: 12px;
+    }
+
+    footer {
+      padding: 8px 24px 20px;
+      font-size: 12px;
+      color: #7076a0;
+      text-align: center;
+    }
+
+    @media (max-width: 600px) {
+      header, main, footer {
+        padding-left: 12px;
+        padding-right: 12px;
+      }
+      .controls {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+      .slider-group {
+        width: 100%;
+      }
+    }
+  </style>
 </head>
 <body>
-    <div class="container">
-        <h1>Time Dilation Visualization</h1>
-        <div id="dilation-demo">Loading...</div>
-    </div>
-    <script>
-        function calculateTimeDilation(speed) {
-            const c = 299792.458; // speed of light in km/s
-            return 1 / Math.sqrt(1 - (speed * speed) / (c * c));
+  <header>
+    <h1>时间膨胀可视化：光钟模型（HTML + JavaScript）</h1>
+    <p>拖动下面的速度滑块，观察静止光钟与高速运动光钟的对比，直观理解狭义相对论中的时间膨胀。</p>
+  </header>
+
+  <main>
+    <section class="controls">
+      <div class="slider-group">
+        <label for="speedRange">飞船速度 v / c：</label>
+        <input
+          id="speedRange"
+          type="range"
+          min="0"
+          max="95"
+          value="60"
+          step="1"
+        />
+        <span id="speedText" class="value-display"></span>
+      </div>
+      <div>
+        <div>洛伦兹因子 γ：</div>
+        <div id="gammaText" class="value-display"></div>
+      </div>
+      <div>
+        <div>时间膨胀比（飞船钟 / 地面钟）：</div>
+        <div id="dilationText" class="value-display"></div>
+      </div>
+    </section>
+
+    <section class="panels">
+      <div class="panel">
+        <h2>静止参考系中的光钟</h2>
+        <p>光在上下两面镜子之间直上直下，构成一个简化的“钟”。在光钟自己的参考系中，时间以正常速度流逝。</p>
+        <canvas id="canvasRest" width="500" height="260"></canvas>
+      </div>
+
+      <div class="panel">
+        <h2>高速运动中的光钟</h2>
+        <p>当光钟随飞船以速度 v 水平运动时，在外部观察者看来，光走的是更长的斜线路径。因为光速 c 不变，走更远的路需要更多时间，所以这只钟会变慢。</p>
+        <canvas id="canvasMoving" width="500" height="260"></canvas>
+        <div class="formula">
+          公式：<code>γ = 1 / √(1 - v²/c²)</code>，
+          外部观察者看到：<code>Δt = γ · Δτ</code>，
+          其中 <code>Δτ</code> 是光钟自身测得的时间（固有时间）。
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>如何理解这个动画？</h2>
+      <p>
+        当速度 v 接近光速 c 时，右边光钟中光的路径变得又长又斜，这表示每一次“滴答”需要更长时间。
+        所以，在外部观察者看来，飞船上的时间流逝得更慢。<br />
+        在极端情况下，v → c，γ 会变得非常大，时间膨胀效应极其明显，这就是双生子佯谬等效应的基础。
+      </p>
+    </section>
+  </main>
+
+  <footer>
+    本页面为静态前端演示，可直接通过 GitHub Pages 访问。
+  </footer>
+
+  <script>
+    // 当前速度（用 vOverC 表示 v/c）
+    let vOverC = 0.6;
+
+    const speedRangeEl = document.getElementById("speedRange");
+    const speedTextEl = document.getElementById("speedText");
+    const gammaTextEl = document.getElementById("gammaText");
+    const dilationTextEl = document.getElementById("dilationText");
+
+    const canvasRest = document.getElementById("canvasRest");
+    const canvasMoving = document.getElementById("canvasMoving");
+    const ctxRest = canvasRest.getContext("2d");
+    const ctxMoving = canvasMoving.getContext("2d");
+
+    // 光钟几何参数
+    const clockTopY = 40;
+    const clockBottomY = 220;
+    const clockXCenter = 250;
+
+    // 运动光钟的水平位移速度（像素/秒范围，纯视觉参数）
+    const baseHorizontalSpeed = 120; // v/c = 1 时对应的最大水平视觉速度
+
+    let lastTimestamp = 0;
+
+    // 更新顶部信息显示
+    function updateInfoTexts() {
+      const gamma = 1 / Math.sqrt(1 - vOverC * vOverC || 1e-8);
+      speedTextEl.textContent = `v ≈ ${(vOverC * 100).toFixed(0)}% · c`;
+      gammaTextEl.textContent = `γ ≈ ${gamma.toFixed(3)}`;
+      dilationTextEl.textContent = `飞船钟走时速度 ≈ (1 / γ) ≈ ${(1 / gamma).toFixed(3)} 倍于地面钟`;
+    }
+
+    speedRangeEl.addEventListener("input", () => {
+      // 滑块 0~95 → v/c 0~0.95
+      vOverC = parseInt(speedRangeEl.value, 10) / 100;
+      updateInfoTexts();
+    });
+
+    updateInfoTexts();
+
+    // 绘制静止光钟（竖直上下走的光）
+    function drawRestClock(time) {
+      const ctx = ctxRest;
+      const w = canvasRest.width;
+      const h = canvasRest.height;
+
+      ctx.clearRect(0, 0, w, h);
+      drawGrid(ctx, w, h);
+
+      // 上下镜子
+      ctx.strokeStyle = "#cfd2ff";
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.moveTo(clockXCenter - 50, clockTopY);
+      ctx.lineTo(clockXCenter + 50, clockTopY);
+      ctx.moveTo(clockXCenter - 50, clockBottomY);
+      ctx.lineTo(clockXCenter + 50, clockBottomY);
+      ctx.stroke();
+
+      // 光子位置：在上下之间来回弹跳
+      const T = 2000; // ms，一次往返周期
+      const t = time % T;
+      const halfT = T / 2;
+      let y;
+
+      if (t < halfT) {
+        const ratio = t / halfT;
+        y = clockTopY + ratio * (clockBottomY - clockTopY); // 上→下
+      } else {
+        const ratio = (t - halfT) / halfT;
+        y = clockBottomY - ratio * (clockBottomY - clockTopY); // 下→上
+      }
+
+      // 竖直光路
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.25)";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(clockXCenter, clockTopY);
+      ctx.lineTo(clockXCenter, clockBottomY);
+      ctx.stroke();
+
+      // 光子
+      ctx.fillStyle = "#ffb703";
+      ctx.beginPath();
+      ctx.arc(clockXCenter, y, 7, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // 绘制运动中的光钟（斜线路径）
+    function drawMovingClock(time) {
+      const ctx = ctxMoving;
+      const w = canvasMoving.width;
+      const h = canvasMoving.height;
+
+      ctx.clearRect(0, 0, w, h);
+      drawGrid(ctx, w, h);
+
+      const xCenter = clockXCenter;
+
+      // 上下镜子在飞船自身参考系中仍然竖直
+      ctx.strokeStyle = "#cfd2ff";
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.moveTo(xCenter - 50, clockTopY);
+      ctx.lineTo(xCenter + 50, clockTopY);
+      ctx.moveTo(xCenter - 50, clockBottomY);
+      ctx.lineTo(xCenter + 50, clockBottomY);
+      ctx.stroke();
+
+      // 垂直方向的运动：与静止光钟相同
+      const T = 2000;
+      const t = time % T;
+      const halfT = T / 2;
+
+      let verticalY;
+      if (t < halfT) {
+        const ratio = t / halfT;
+        verticalY = clockTopY + ratio * (clockBottomY - clockTopY);
+      } else {
+        const ratio = (t - halfT) / halfT;
+        verticalY = clockBottomY - ratio * (clockBottomY - clockTopY);
+      }
+
+      // 水平位移：模拟飞船运动导致的光路倾斜（纯可视化）
+      const horizontalSpeed = baseHorizontalSpeed * vOverC;
+      const baseX = xCenter - 80; // 起始参考位置
+      const x = baseX + (time / 1000) * horizontalSpeed;
+
+      // 画“尾迹”：过去一小段时间内的光路，用多段线表示
+      const trailSteps = 40;
+      ctx.strokeStyle = "rgba(255, 255, 255, 0.2)";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+
+      for (let i = 0; i <= trailSteps; i++) {
+        const dt = (i / trailSteps) * 800; // 追溯 0.8 秒
+        const tPast = (time - dt + T * 1000) % T;
+        const xPast = baseX + ((time - dt) / 1000) * horizontalSpeed;
+
+        let yPast;
+        if (tPast < halfT) {
+          const ratio = tPast / halfT;
+          yPast = clockTopY + ratio * (clockBottomY - clockTopY);
+        } else {
+          const ratio = (tPast - halfT) / halfT;
+          yPast = clockBottomY - ratio * (clockBottomY - clockTopY);
         }
-        function updateDilation() {
-            const speed = parseFloat(document.getElementById('speed').value) || 0;
-            const dilation = calculateTimeDilation(speed);
-            document.getElementById('dilation-demo').textContent = `Time Dilation Factor: ${dilation.toFixed(5)}`;
-        }
-        updateDilation(); // call once to initialize
-    </script>
+
+        if (i === 0) ctx.moveTo(xPast, yPast);
+        else ctx.lineTo(xPast, yPast);
+      }
+      ctx.stroke();
+
+      // 当前光子
+      ctx.fillStyle = "#ffb703";
+      ctx.beginPath();
+      ctx.arc(x, verticalY, 7, 0, Math.PI * 2);
+      ctx.fill();
+
+      // 画飞船轮廓（简单示意）
+      drawShip(ctx, xCenter, clockBottomY + 18, vOverC);
+    }
+
+    // 背景网格 + 星点
+    function drawGrid(ctx, w, h) {
+      ctx.save();
+      ctx.strokeStyle = "rgba(144, 164, 255, 0.12)";
+      ctx.lineWidth = 1;
+
+      // 竖直网格线
+      for (let x = 40; x < w; x += 40) {
+        ctx.beginPath();
+        ctx.moveTo(x, 10);
+        ctx.lineTo(x, h - 10);
+        ctx.stroke();
+      }
+
+      // 水平网格线
+      for (let y = 20; y < h; y += 40) {
+        ctx.beginPath();
+        ctx.moveTo(20, y);
+        ctx.lineTo(w - 20, y);
+        ctx.stroke();
+      }
+
+      // 星点点缀
+      for (let i = 0; i < 18; i++) {
+        const sx = Math.random() * w;
+        const sy = Math.random() * h;
+        ctx.fillStyle = "rgba(255, 255, 255, " + (0.2 + Math.random() * 0.4) + ")";
+        ctx.fillRect(sx, sy, 1.2, 1.2);
+      }
+
+      ctx.restore();
+    }
+
+    // 简单飞船绘制
+    function drawShip(ctx, x, y, v) {
+      ctx.save();
+      ctx.translate(x, y);
+
+      const shipWidth = 130;
+      const shipHeight = 26;
+
+      // 船体
+      ctx.fillStyle = "#e0fbfc";
+      ctx.beginPath();
+      ctx.moveTo(-shipWidth / 2, 0);
+      ctx.quadraticCurveTo(0, -shipHeight, shipWidth / 2, 0);
+      ctx.quadraticCurveTo(0, shipHeight, -shipWidth / 2, 0);
+      ctx.closePath();
+      ctx.fill();
+
+      // 窗户
+      ctx.fillStyle = "#118ab2";
+      ctx.beginPath();
+      ctx.ellipse(-20, 0, 12, 8, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.ellipse(10, 0, 8, 6, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // 尾焰强度根据速度变化
+      const flameLength = 25 + v * 30;
+      ctx.fillStyle = "rgba(255, 111, 0, " + (0.4 + v * 0.6) + ")";
+      ctx.beginPath();
+      ctx.moveTo(-shipWidth / 2, 0);
+      ctx.lineTo(-shipWidth / 2 - flameLength, -6);
+      ctx.lineTo(-shipWidth / 2 - flameLength * 0.8, 0);
+      ctx.lineTo(-shipWidth / 2 - flameLength, 6);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.restore();
+    }
+
+    // 动画主循环
+    function animate(timestamp) {
+      if (!lastTimestamp) lastTimestamp = timestamp;
+      lastTimestamp = timestamp;
+
+      drawRestClock(timestamp);
+      drawMovingClock(timestamp);
+
+      requestAnimationFrame(animate);
+    }
+
+    requestAnimationFrame(animate);
+  </script>
 </body>
 </html>
